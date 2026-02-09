@@ -1,0 +1,12 @@
+# Cloudflare build artefacts
+.wrangler/
+
+# Private keys (never commit)
+private.pem
+private.b64
+public.pem
+public.b64
+
+# Any other secrets
+*.pem
+*.b64
