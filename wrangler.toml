@@ -1,0 +1,9 @@
+name = "agent-identity"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+TOKEN_TTL_SECONDS = "86400"
+
+[observability]
+enabled = true
