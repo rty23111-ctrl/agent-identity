@@ -1,13 +1,18 @@
 import { readJson } from "../../lib/utils";
+import { success, error } from "../../lib/errors";
 
-export async function handleRegister(request: Request, env: Env): Promise<Response> {
+export async function handleRegister(
+  request: Request,
+  env: Env
+): Promise<Response> {
   const body = await readJson(request);
+
   if (!body || !body.clientId) {
-    return new Response(JSON.stringify({ error: "clientId required" }), { status: 400 });
+    return error("CLIENT_ID_REQUIRED", "clientId is required");
   }
 
-  const id = body.clientId;
-
-  // In v1: no persistence — registration is always accepted
-  return new Response(JSON.stringify({ clientId: id }), { status: 201 });
+  return success({
+    clientId: body.clientId,
+    registered: true
+  });
 }
