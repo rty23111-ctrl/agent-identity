@@ -632,7 +632,7 @@ export default {
         }
       }
 
-      // Register client
+      // Register client (with payment enforcement)
       if (path === "/api/register" && method === "POST") {
         const limited = await checkRateLimit(
           env,
@@ -659,6 +659,49 @@ export default {
         }
         const clientId = parsedClientId.clientId;
 
+        // Payment enforcement for new client registration
+        if (isPaidExtensionEnabled(env)) {
+          // Check if paid instance exists and is active
+          const paidInstance = await getPaidInstance(env, clientId);
+          if (!paidInstance || paidInstance.status !== "active") {
+            // Start Stripe checkout session
+            try {
+              const session = await createStripeCheckoutSession(env, {
+                origin: url.origin,
+                agentId: clientId,
+                successUrl: body.successUrl || env.PAID_SUCCESS_URL,
+                cancelUrl: body.cancelUrl || env.PAID_CANCEL_URL,
+              }, isPaidTestRequest(request, env));
+
+              const now = Date.now();
+              const record: PaidInstanceRecord = {
+                agentId: clientId,
+                status: "pending_payment",
+                createdAt: now,
+                updatedAt: now,
+                checkoutSessionId: session.id,
+                checkoutUrl: session.url,
+                planId: env.STRIPE_PRICE_ID,
+              };
+              await Promise.all([
+                putPaidInstance(env, record),
+                putCheckoutSessionAgent(env, session.id, clientId),
+              ]);
+              audit("client.register", "pending_payment", 200, { checkoutUrl: session.url }, clientId);
+              return json({
+                registered: null,
+                paymentRequired: true,
+                checkoutUrl: session.url,
+                agentId: clientId,
+              });
+            } catch (error) {
+              audit("client.register", "failure", 500, { reason: "checkout-create-failed", message: error instanceof Error ? error.message : String(error) }, clientId);
+              return err("CHECKOUT_CREATE_FAILED", error instanceof Error ? error.message : "Unable to create checkout session", 500);
+            }
+          }
+        }
+
+        // Register client after payment
         const existing = await getClient(env, clientId);
         if (!existing) {
           await putClient(env, {

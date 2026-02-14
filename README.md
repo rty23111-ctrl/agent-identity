@@ -1,14 +1,20 @@
+#### Free vs Paid
+
+Free (unpaid) users:
+
+Paid users:
+ Registration of a new dedicated instance requires an initial payment.
 # agent-identity
 
 ## Dashboard
-
-- The dashboard UI is served at `/dashboard`.
-- The HTML template is defined in `src/dashboard-page.ts` (`dashboardHtml`).
+ Registration of a new dedicated instance requires payment. The first instance uses default keys, which can be used immediately after payment.
 - Update `src/dashboard-page.ts` for dashboard UI changes.
 
 ## Markdown Viewer
-
-- Webpage route: `/markdown`
+   - Initiates Stripe Checkout for new server instance: `{ "clientId": "..." }` (optionally `email`, `successUrl`, `cancelUrl`)
+   - Returns `checkoutUrl` and session metadata if payment required
+   - Blocks registration until payment is successful (`active` status required)
+   - On successful payment, instance is provisioned with default keys
 - Purpose: select and view predefined markdown files in-browser.
 - Current selectable docs:
 	- `COMPETITIVE_DEEP_DIVE.md`
@@ -16,7 +22,7 @@
 	- `SALES_PACKAGE.md`
 
 ## API Description
-
+ Payment is now required for both server creation (registration) and for each key update. The `/api/register` endpoint will block registration until payment is confirmed. The `/api/update-keys` endpoint will block key updates until payment is confirmed. Once payment is successful, the instance status becomes `active` and keys are updated as requested.
 - Machine-readable API description is available at `/openapi.json`.
 - Capability summary is available at `/capabilities`.
 - Agent discovery metadata is available at `/.well-known/agent.json`.
@@ -139,19 +145,25 @@
 - `PAID_TEST_MODE=true` (enables test-mode paid flow without real Stripe charges)
 - `PAID_TEST_TOKEN` (required in test mode for simulated webhook auth via `x-paid-test-token`)
 
+
 ### Paid extension endpoints
 
-- `POST /api/paid/checkout`
-	- Starts Stripe Checkout for `{ "agentId": "..." }` (optionally `email`, `successUrl`, `cancelUrl`)
-	- Returns `checkoutUrl` and checkout session metadata
+- `POST /api/update-keys`
+	- Initiates Stripe Checkout for key update: `{ "agentId": "...", "privateKey": "...", "publicKey": "..." }` (optionally `email`, `successUrl`, `cancelUrl`)
+	- Returns `checkoutUrl` and session metadata if payment required
+	- Blocks key update until payment is successful (`active` status required)
+	- On successful payment, keys are updated
 - `POST /api/paid/webhook`
 	- Receives Stripe events and updates paid instance state
-	- On successful checkout, triggers provisioning via `PAID_PROVISIONER_URL`
 - `GET /api/paid/instances/{agentId}`
 	- Returns current paid instance status (`pending_payment`, `provisioning`, `active`, `past_due`, `canceled`, `provision_failed`)
 - `POST /api/paid/provisioning/callback`
 	- Optional callback for your provisioner to report async status updates
 	- Requires `Authorization: Bearer <PAID_PROVISIONER_AUTH_TOKEN>`
+
+#### Payment Model Change
+
+Payment is now required when updating keys, not when creating a server instance. The `/api/update-keys` endpoint will block key updates until payment is confirmed. Once payment is successful, keys are updated and the paid instance status becomes `active`.
 
 ### Provisioning contract
 

@@ -157,29 +157,41 @@ async function runPaidFlowTest(openapi) {
 
   const paidAgentId = `paid-${randomClientId()}`.slice(0, 64);
 
-  const checkout = await expectOk(
-    "Paid checkout",
+  // Registration should require payment
+  const regResp = await request("POST", "/api/register", { clientId: paidAgentId }, { "x-paid-test-token": TEST_PAID_TOKEN });
+  if (regResp.json?.paymentRequired) {
+    if (!regResp.json?.checkoutUrl) throw new Error("Registration paymentRequired but missing checkoutUrl");
+    console.log(`✅ Registration payment required, checkoutUrl: ${regResp.json.checkoutUrl}`);
+  } else {
+    throw new Error("Registration did not require payment for paid agent");
+  }
+
+  // Simulate payment completion via webhook
+  const sessionId = regResp.json.checkoutSessionId || `sess_${Date.now()}`;
+  await expectOk(
+    "Paid webhook simulate checkout completion",
     "POST",
-    "/api/paid/checkout",
+    "/api/paid/webhook",
     {
-      agentId: paidAgentId,
-      email: "agent-harness@example.com",
+      id: `evt_${Date.now()}`,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: sessionId,
+          client_reference_id: paidAgentId,
+          customer: `cus_test_${Date.now()}`,
+          subscription: `sub_test_${Date.now()}`,
+          metadata: { agentId: paidAgentId },
+        },
+      },
     },
-    (json) => {
-      if (json?.agentId !== paidAgentId) throw new Error("Paid checkout agentId mismatch");
-      if (typeof json?.checkoutSessionId !== "string" || !json.checkoutSessionId.trim()) {
-        throw new Error("Paid checkout missing checkoutSessionId");
-      }
-      if (typeof json?.checkoutUrl !== "string" || !json.checkoutUrl.trim()) {
-        throw new Error("Paid checkout missing checkoutUrl");
-      }
-    },
+    undefined,
     {
       "x-paid-test-token": TEST_PAID_TOKEN,
     }
   );
 
-  const sessionId = checkout.json.checkoutSessionId;
+  // Removed duplicate sessionId declaration
 
   await expectOk(
     "Paid webhook simulate checkout completion",

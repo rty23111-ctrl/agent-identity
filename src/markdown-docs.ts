@@ -1,6 +1,7 @@
 import competitiveDeepDive from "../COMPETITIVE_DEEP_DIVE.md";
 import financialProjections from "../FINANCIAL_PROJECTIONS.md";
 import salesPackage from "../SALES_PACKAGE.md";
+import pitchDeckOutline from "../PITCH_DECK_OUTLINE.md";
 
 export type MarkdownDoc = {
   id: string;
@@ -27,6 +28,12 @@ export const markdownDocs: MarkdownDoc[] = [
     title: "Sales Package",
     fileName: "SALES_PACKAGE.md",
     content: salesPackage,
+  },
+  {
+    id: "pitch-deck-outline",
+    title: "Pitch Deck Outline",
+    fileName: "PITCH_DECK_OUTLINE.md",
+    content: pitchDeckOutline,
   },
 ];
 

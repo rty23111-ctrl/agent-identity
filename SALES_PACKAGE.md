@@ -56,8 +56,9 @@ Agent Identity is a purpose-built auth service that:
 - Enterprise: Custom (unlimited clients, compliance features, SLAs)
 
 **Optional Paid Extension (Dedicated Instance):**
-- Paid checkout flow can provision one isolated Worker+KV instance per agent/customer.
+- Paid checkout flow is required for provisioning a new dedicated Worker+KV instance per agent/customer (initial fee).
 - Free shared service remains default; dedicated instances are an opt-in paid add-on.
+- The first instance uses default keys, which can be used immediately after payment. Additional key updates require payment.
 
 ### Competitive Advantage
 | Feature | Agent-Identity | Auth0 | Firebase | Apigee |
@@ -148,6 +149,8 @@ Agent Identity is a purpose-built auth service that:
 | **Advanced Analytics** | +$100/month | Custom dashboards, usage trends |
 | **SSO Integration** | +$200/month | SAML/OIDC provider capabilities |
 | **Key Management (KMS)** | +$300/month | AWS KMS/Azure Key Vault integration |
+| **Initial Dedicated Instance** | One-time fee | Payment required for new server creation (registration) |
+| **Key Update** | Per update fee | Payment required each time keys are updated |
 | **Premium Support** | +$500/month | 24/7 phone + Slack support |
 
 ### Pricing Psychology
@@ -234,19 +237,22 @@ Agent Identity is a purpose-built auth service that:
 #### **Part 1: Registration** (1 minute)
 
 ```bash
-# Step 1: Register first agent
+# Step 1: Register first agent (payment required)
 curl -X POST https://agent-identity.dev/api/register \
   -H "x-api-key: <admin-api-key-if-enabled>" \
   -H "Content-Type: application/json" \
   -d '{"clientId": "content-writer-1"}'
 
-# Response:
+# Response (if payment required):
 {
-  "registered": "content-writer-1",
-  "totalClients": 2
+  "paymentRequired": true,
+  "checkoutUrl": "https://checkout.stripe.com/session/...",
+  "agentId": "content-writer-1"
 }
 
-# Step 2: Register second agent
+# After payment is completed, registration proceeds and instance is provisioned with default keys.
+
+# Step 2: Register second agent (same flow)
 curl -X POST https://agent-identity.dev/api/register \
   -H "x-api-key: <admin-api-key-if-enabled>" \
   -H "Content-Type: application/json" \

@@ -85,19 +85,29 @@ Visual: 4-step diagram
 3. Agent uses token to call API
 4. Key events exported to your logging/compliance stack
 
-Show actual API calls (simplified):
-```
-POST /api/register
-  {"clientId": "my-agent"}
-→ Token issued
 
-POST /api/token
-  {"clientId": "my-agent"}
-→ JWT token returned
+Show actual API calls (payment-enforced, default keys):
+```bash
+# Step 1: Register first agent (payment required)
+curl -X POST https://agent-identity.dev/api/register \
+  -H "x-api-key: <admin-api-key-if-enabled>" \
+  -H "Content-Type: application/json" \
+  -d '{"clientId": "content-writer-1"}'
 
-POST /my-api
-  headers: {Authorization: Bearer <token>}
-→ Request validated + logged
+# Response (if payment required):
+{
+  "paymentRequired": true,
+  "checkoutUrl": "https://checkout.stripe.com/session/...",
+  "agentId": "content-writer-1"
+}
+
+# After payment is completed, registration proceeds and instance is provisioned with default keys.
+
+# Step 2: Register second agent (same flow)
+curl -X POST https://agent-identity.dev/api/register \
+  -H "x-api-key: <admin-api-key-if-enabled>" \
+  -H "Content-Type: application/json" \
+  -d '{"clientId": "seo-optimizer-1"}'
 ```
 
 ---
@@ -170,12 +180,13 @@ Key insight:
 - Free tier gets developers excited (viral growth)
 - Pro = impulse buy ($99 "just put it on my card")
 - Business = formal procurement
-- Enterprise = high-value deals
+Enterprise = high-value deals
 
----
+Add-on note:
+ - **Dedicated Instance Extension (Paid):** Agent/customer must pay an initial fee to create a dedicated instance (registration). The first instance uses default keys, which can be used immediately after payment. Each subsequent key update requires a separate payment.
+
 
 ## SLIDE 11: Go-to-Market Strategy
-**Title:** "How We Win"
 
 Timeline:
 - **Month 1:** Launch (HN, Product Hunt, dev communities)
