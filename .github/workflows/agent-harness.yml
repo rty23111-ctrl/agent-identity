@@ -1,0 +1,142 @@
+name: Agent Harness (Deployed Preview)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  deployed-agent-harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure required secrets exist
+        run: |
+          set -euo pipefail
+          [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          [[ -n "${{ secrets.PRIVATE_KEY }}" ]] || { echo "Missing PRIVATE_KEY secret"; exit 1; }
+          [[ -n "${{ secrets.PUBLIC_KEY }}" ]] || { echo "Missing PUBLIC_KEY secret"; exit 1; }
+
+      - name: Prepare ephemeral Cloudflare resources
+        id: prepare
+        run: |
+          set -euo pipefail
+
+          SERVICE_NAME="agent-identity-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          KV_TITLE="agent_identity_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          KV_PREVIEW_TITLE="${KV_TITLE}_preview"
+          WRANGLER_CONFIG_FILE="${RUNNER_TEMP}/wrangler-ci-${GITHUB_RUN_ID}.toml"
+          ADMIN_API_KEY="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+
+          create_kv_out="$(npx wrangler kv namespace create "$KV_TITLE")"
+          KV_ID="$(echo "$create_kv_out" | sed -n 's/.*id = "\([^"]*\)".*/\1/p' | tail -n1)"
+          [[ -n "$KV_ID" ]] || { echo "Failed to parse KV_ID"; echo "$create_kv_out"; exit 1; }
+
+          create_kv_preview_out="$(npx wrangler kv namespace create "$KV_PREVIEW_TITLE" --preview)"
+          KV_PREVIEW_ID="$(echo "$create_kv_preview_out" | sed -n 's/.*id = "\([^"]*\)".*/\1/p' | tail -n1)"
+          [[ -n "$KV_PREVIEW_ID" ]] || { echo "Failed to parse KV_PREVIEW_ID"; echo "$create_kv_preview_out"; exit 1; }
+
+          cat > "$WRANGLER_CONFIG_FILE" <<EOF
+          name = "$SERVICE_NAME"
+          main = "src/index.ts"
+          compatibility_date = "2024-01-01"
+
+          [[kv_namespaces]]
+          binding = "CLIENTS"
+          id = "$KV_ID"
+          preview_id = "$KV_PREVIEW_ID"
+
+          [vars]
+          TOKEN_TTL_SECONDS = "3600"
+          RATE_LIMIT_WINDOW_SECONDS = "60"
+          RATE_LIMIT_MAX_REGISTER = "100"
+          RATE_LIMIT_MAX_TOKEN = "200"
+          RATE_LIMIT_MAX_VALIDATE = "300"
+          RATE_LIMIT_MAX_CLIENTS = "120"
+
+          [observability]
+          enabled = true
+          EOF
+
+          {
+            echo "SERVICE_NAME=$SERVICE_NAME"
+            echo "KV_ID=$KV_ID"
+            echo "KV_PREVIEW_ID=$KV_PREVIEW_ID"
+            echo "WRANGLER_CONFIG_FILE=$WRANGLER_CONFIG_FILE"
+            echo "ADMIN_API_KEY=$ADMIN_API_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Set worker secrets
+        run: |
+          set -euo pipefail
+          printf "%s" "${{ secrets.PRIVATE_KEY }}" | npx wrangler secret put PRIVATE_KEY --config "$WRANGLER_CONFIG_FILE"
+          printf "%s" "${{ secrets.PUBLIC_KEY }}" | npx wrangler secret put PUBLIC_KEY --config "$WRANGLER_CONFIG_FILE"
+          printf "%s" "$ADMIN_API_KEY" | npx wrangler secret put ADMIN_API_KEY --config "$WRANGLER_CONFIG_FILE"
+
+      - name: Deploy worker
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config "$WRANGLER_CONFIG_FILE"
+
+      - name: Resolve deployment URL
+        run: |
+          set -euo pipefail
+          WHOAMI_OUTPUT="$(npx wrangler whoami)"
+          SUBDOMAIN="$(echo "$WHOAMI_OUTPUT" | grep -Eio '[a-z0-9-]+\.workers\.dev' | head -n1 | sed 's/\.workers\.dev$//')"
+          [[ -n "$SUBDOMAIN" ]] || { echo "Unable to determine workers.dev subdomain"; echo "$WHOAMI_OUTPUT"; exit 1; }
+
+          AUTH_BASE_URL="https://${SERVICE_NAME}.${SUBDOMAIN}.workers.dev"
+          echo "AUTH_BASE_URL=$AUTH_BASE_URL" >> "$GITHUB_ENV"
+
+      - name: Wait for deployment to become reachable
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -w "%{http_code}" "$AUTH_BASE_URL/health" || true)"
+            if [[ "$code" == "200" ]]; then
+              echo "Deployment is reachable"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Timed out waiting for deployment health endpoint"
+          exit 1
+
+      - name: Run autonomous agent harness
+        run: npm run test:agent
+        env:
+          AUTH_BASE_URL: ${{ env.AUTH_BASE_URL }}
+          AUTH_ADMIN_KEY: ${{ env.ADMIN_API_KEY }}
+          AUTH_CLEAR_ALL_ON_START: "true"
+
+      - name: Cleanup ephemeral resources
+        if: always()
+        run: |
+          set +e
+          if [[ -n "${WRANGLER_CONFIG_FILE:-}" && -f "${WRANGLER_CONFIG_FILE:-}" ]]; then
+            npx wrangler delete --config "$WRANGLER_CONFIG_FILE" --force
+          fi
+          if [[ -n "${KV_ID:-}" ]]; then
+            npx wrangler kv namespace delete --namespace-id "$KV_ID" --force
+          fi
+          if [[ -n "${KV_PREVIEW_ID:-}" ]]; then
+            npx wrangler kv namespace delete --namespace-id "$KV_PREVIEW_ID" --force
+          fi

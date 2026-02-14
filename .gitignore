@@ -1,12 +1,20 @@
 # Cloudflare build artefacts
 .wrangler/
+node_modules
+blue-voice-6a2d
+dist/
 
 # Private keys (never commit)
 private.pem
+private.der
 private.b64
 public.pem
 public.b64
 
+# Local development secrets
+.dev.vars
+
 # Any other secrets
 *.pem
 *.b64
+*.der

@@ -1,0 +1,24 @@
+{
+  "name": "agent-identity",
+  "version": "1.1.0",
+  "description": "Agent identity and authentication service",
+  "private": true,
+  "scripts": {
+    "test": "vitest",
+    "test:agent": "node test/agent-harness.js",
+    "test:agent:paid": "AUTH_TEST_PAID=true PAID_EXTENSION_ENABLED=true PAID_TEST_MODE=true PAID_TEST_TOKEN=local-paid-test-token AUTH_TEST_PAID_TOKEN=local-paid-test-token node test/agent-harness.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:agent": "bash scripts/deploy-agent.sh",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "typescript": "^5.5.2",
+    "vitest": "^1.6.1",
+    "wrangler": "^3.50.0"
+  },
+  "dependencies": {
+    "no-fetch": "^1.6.2"
+  }
+}
