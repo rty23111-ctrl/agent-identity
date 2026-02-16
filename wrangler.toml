@@ -8,8 +8,8 @@ globs = ["**/*.md"]
 
 [[kv_namespaces]]
 binding = "CLIENTS"
-id = "client_registry"
-preview_id = "client_registry_preview"
+id = "cf6b6c730b6b4f32b8c8bc67e11dae34"
+preview_id = "cf6b6c730b6b4f32b8c8bc67e11dae34"
 
 [vars]
 TOKEN_TTL_SECONDS = "86400"

@@ -8,7 +8,7 @@ export interface Env {
   CLIENTS: KVNamespace;          // <-- your real KV binding
   TOKEN_TTL_SECONDS?: string;
   ADMIN_API_KEY?: string;
-  AUDIT_WEBHOOK_URL?: string;
+  AUaDIT_WEBHOOK_URL?: string;
   AUDIT_WEBHOOK_AUTH_TOKEN?: string;
   AUDIT_WEBHOOK_TIMEOUT_MS?: string;
   RATE_LIMIT_WINDOW_SECONDS?: string;
@@ -328,6 +328,21 @@ async function verifyToken(
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
+    // CORS preflight for API routes only
+    if (path.startsWith("/api/") && method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+          "Access-Control-Max-Age": "86400"
+        }
+      });
+    }
     const requestId = newRequestId();
 
     const audit = (
@@ -350,6 +365,22 @@ export default {
         details: details ?? null,
       });
     };
+
+    function json(obj: any, status = 200, headers: Record<string, string> = {}) {
+      return new Response(JSON.stringify(obj), {
+        status,
+        headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+
+    function err(code: string, message: string, status = 400, details?: any) {
+      // Accepts optional headers as last argument
+      let headers: Record<string, string> = {};
+      if (typeof arguments[4] === "object" && arguments[4] !== null) {
+        headers = arguments[4];
+      }
+      return json({ error: { code, message, details } }, status, headers);
+    }
 
     try {
       const url = new URL(request.url);
@@ -377,27 +408,27 @@ export default {
             title: doc.title,
             fileName: doc.fileName,
           })),
-        });
+        }, 200, { "Access-Control-Allow-Origin": "*" });
       }
 
       if (path.startsWith("/api/markdown-docs/") && method === "GET") {
         const id = decodeURIComponent(path.replace("/api/markdown-docs/", "")).trim();
-        if (!id) return err("MARKDOWN_DOC_ID_REQUIRED", "Document id is required", 400);
+        if (!id) return err("MARKDOWN_DOC_ID_REQUIRED", "Document id is required", 400, undefined, { "Access-Control-Allow-Origin": "*" });
 
         const doc = getMarkdownDocById(id);
-        if (!doc) return err("MARKDOWN_DOC_NOT_FOUND", "Unknown markdown document", 404, { id });
+        if (!doc) return err("MARKDOWN_DOC_NOT_FOUND", "Unknown markdown document", 404, { id }, { "Access-Control-Allow-Origin": "*" });
 
         return json({
           id: doc.id,
           title: doc.title,
           fileName: doc.fileName,
           content: doc.content,
-        });
+        }, 200, { "Access-Control-Allow-Origin": "*" });
       }
 
       // Health
       if (path === "/health") {
-        return json({ status: "ok" });
+        return json({ status: "ok" }); // not an API route, no CORS
       }
 
       // Capabilities
@@ -413,17 +444,17 @@ export default {
             "audit:webhook",
             "instance:paid-provision",
           ],
-        });
+        }); // not an API route, no CORS
       }
 
       // OpenAPI description
       if (path === "/openapi.json") {
-        return json(openApiSpec(url.origin));
+        return json(openApiSpec(url.origin)); // not an API route, no CORS
       }
 
       // Well-known discovery (agent/LLM-friendly)
       if (path === "/.well-known/agent.json" || path === "/.well-known/ai-plugin.json") {
-        return json(agentDiscovery(url.origin, env));
+        return json(agentDiscovery(url.origin, env)); // not an API route, no CORS
       }
 
       // Paid extension: start checkout for dedicated instance

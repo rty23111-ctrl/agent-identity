@@ -292,7 +292,7 @@ export const dashboardHtml = `
       };
     }
 
-    var DEPLOY_URL = "https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev";
+    var DEPLOY_URL = "https://agent-identity.rty23111.workers.dev";
 
     var API_BASE =
       window.location.hostname.endsWith("app.github.dev")
